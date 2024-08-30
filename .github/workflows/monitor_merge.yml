@@ -1,0 +1,80 @@
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+jobs:
+  log_metrics:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/') && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const query = `query($q: String!, $cursor: String) {
+              rateLimit {
+                limit
+                cost
+                remaining
+                resetAt
+              }
+              search(query: $q, type: ISSUE, first: 100, after: $cursor) {
+                nodes {
+                  ... on PullRequest {
+                    id
+                    title
+                    createdAt
+                    author {
+                      login
+                      avatarUrl
+                    }
+                    merged
+                    mergedBy {
+                      login
+                      avatarUrl
+                    }
+                    mergedAt
+                    closedAt
+                    closed
+                    isDraft
+                    isInMergeQueue
+                    isReadByViewer
+                    locked
+                    commits(first: 1) {
+                      nodes {
+                        commit {
+                          committedDate
+                        }
+                      }
+                    }
+                    reviewRequests(first:10) {
+                      nodes {
+                        id
+                      }
+                    }
+                    reviews(first: 100) {
+                      nodes {
+                        author {
+                          login
+                          avatarUrl
+                        }
+                        createdAt
+                      }
+                    }
+                  }
+                }
+                pageInfo {
+                    endCursor
+                    hasNextPage
+                }
+              }
+            }`;
+            const q = `[RELEASE] in:title repo:${context.repo.owner}/${context.repo.repo} type:pr state:closed`;
+            const variables = {
+              q,
+              cursor: null,
+            }
+            const result = await github.graphql(query, variables)
+            console.log(result)
